@@ -162,12 +162,43 @@ def accessibility_findings(html):
         if tag in ('h1','h2','h3','h4','h5','h6'):
             if not value:
                 add('Empty heading','moderate',path,'Heading contains no text.','Add a meaningful heading or remove the element.')
-            headings.append(int(tag[1]))
+            headings.append((int(tag[1]), path, value))
         if tag == 'html' and a.get('lang') and not re.match(r'^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)*$', a['lang']):
             add('Page language','moderate',path,'Language code may be invalid.','Use a valid BCP 47 language tag.')
-    if 1 not in headings:
-        add('Main heading','moderate','page','No h1 heading was found.','Give the page a descriptive main heading.')
+    levels = [heading[0] for heading in headings]
+
+    if 1 not in levels:
+        add(
+            'Main heading',
+            'moderate',
+            'page',
+            'No h1 heading was found.',
+            'Give the page a descriptive main heading.'
+        )
+
+    h1_headings = [heading for heading in headings if heading[0] == 1]
+    if len(h1_headings) > 1:
+        for heading in h1_headings[1:]:
+            add(
+                'Multiple main headings',
+                'moderate',
+                heading[1],
+                f'Multiple h1 headings found; this heading is "{heading[2]}".',
+                'Use a single main h1 heading and organize other sections with lower-level headings.'
+            )
+
+    for previous, current in zip(headings, headings[1:]):
+        if current[0] > previous[0] + 1:
+            add(
+                'Skipped heading level',
+                'moderate',
+                current[1],
+                f'Heading "{current[2]}" skips from h{previous[0]} to h{current[0]}.',
+                f'Use h{previous[0] + 1} instead, or restructure the heading hierarchy.'
+            )
+
     return findings
+
 
 
 def accessibility_score(html, findings):
@@ -178,7 +209,13 @@ def accessibility_score(html, findings):
     categories = [
         ('Page title', True, {'Page title'}),
         ('Page language', True, {'Page language'}),
-        ('Heading structure', True, {'Main heading','Empty heading'}),
+        ('Heading structure', True, {
+            'Main heading',
+            'Empty heading',
+            'Skipped heading level',
+            'Multiple main headings'
+        }),
+
         ('Image alternatives', 'img' in tags, {'Image alternative text'}),
         ('Form labels', bool(tags & {'input','select','textarea'}), {'Form control label'}),
         ('Links and buttons', bool(tags & {'a','button'}), {'Link name','Button name'}),

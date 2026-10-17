@@ -1,8 +1,7 @@
 import unittest
 from unittest.mock import patch
 from pathlib import Path
-from scanner import accessibility_findings, accessibility_score, safety_signals, validate_url, public_addresses, ScanError
-
+from scanner import accessibility_findings, accessibility_score, validate_url, public_addresses, ScanError
 class ScannerTests(unittest.TestCase):
     def test_demo_findings(self):
         html=(Path(__file__).resolve().parents[1]/'examples/inaccessible-demo.html').read_text()
@@ -37,5 +36,37 @@ class ScannerTests(unittest.TestCase):
             with self.assertRaises(ScanError): public_addresses('example.com')
         with patch('scanner.socket.getaddrinfo',return_value=[(None,None,None,None,('1.1.1.1',0)),(None,None,None,None,('192.168.0.1',0))]):
             with self.assertRaises(ScanError): public_addresses('example.com')
+
+
+    def test_skipped_heading_level(self):
+        html = '<html><body><h1>Main</h1><h3>Details</h3></body></html>'
+        findings = accessibility_findings(html)
+        rules = [item['rule'] for item in findings]
+        self.assertIn('Skipped heading level', rules)
+
+    def test_valid_heading_hierarchy(self):
+        html = '<html><body><h1>Main</h1><h2>Section</h2><h3>Details</h3></body></html>'
+        findings = accessibility_findings(html)
+        heading_rules = {
+            'Skipped heading level',
+            'Multiple main headings',
+            'Empty heading',
+            'Main heading',
+        }
+        self.assertFalse(
+            any(item['rule'] in heading_rules for item in findings)
+        )
+
+    def test_multiple_h1_headings(self):
+        html = '<html><body><h1>First</h1><h1>Second</h1></body></html>'
+        findings = accessibility_findings(html)
+        rules = [item['rule'] for item in findings]
+        self.assertIn('Multiple main headings', rules)
+
+    def test_page_without_headings(self):
+        html = '<html><body><p>Hello world</p></body></html>'
+        findings = accessibility_findings(html)
+        rules = [item['rule'] for item in findings]
+        self.assertIn('Main heading', rules)
 
 if __name__=='__main__':unittest.main()
