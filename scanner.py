@@ -28,9 +28,9 @@ def validate_url(raw):
         port = parts.port
         hostname = parts.hostname
     except ValueError:
-        raise ScanError('Invalid URL or port.')
+        raise ScanError('The URL or port is invalid. Check the address and use a supported web port.')
     if parts.scheme not in ('http', 'https') or not hostname or parts.username or parts.password:
-        raise ScanError('Use a public HTTP or HTTPS URL without embedded credentials.')
+        raise ScanError('Enter a public HTTP or HTTPS URL without a username or password.')
     if port not in (None, 80, 443, 8000, 8080):
         raise ScanError('Only standard web ports are supported.')
     if any(c.isspace() for c in raw):
@@ -40,13 +40,13 @@ def validate_url(raw):
 
 def public_addresses(hostname):
     if hostname.lower() == 'localhost' or hostname.lower().endswith(('.localhost', '.local', '.internal')):
-        raise ScanError('Private and local addresses cannot be scanned.')
+        raise ScanError('This destination is private or local and cannot be scanned. ''Try a publicly accessible website.')
     try:
         addresses = {ipaddress.ip_address(item[4][0]) for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)}
     except (socket.gaierror, ValueError):
-        raise ScanError('The domain could not be resolved.')
+        raise ScanError('The website address could not be resolved. ''Check the URL and try again.')
     if not addresses or any(not ip.is_global for ip in addresses):
-        raise ScanError('Private and local addresses cannot be scanned.')
+        raise ScanError('This destination is private or local and cannot be scanned. ''Try a publicly accessible website.')
     return addresses
 
 
@@ -56,39 +56,97 @@ class NoRedirect(HTTPRedirectHandler, ProxyHandler):
 
 
 def fetch_page(url):
-    """Revalidate each redirect; DNS rebinding still requires network sandboxing for public deployments."""
+    """Fetch an HTML page with safe, actionable error messages."""
     tls_context = ssl.create_default_context(cafile=certifi.where())
     opener = build_opener(NoRedirect, ProxyHandler({}), HTTPSHandler(context=tls_context))
     current = url
+
     for _ in range(5):
         current = validate_url(current)
         parts = urlsplit(current)
         public_addresses(parts.hostname)
+
         try:
-            response = opener.open(Request(current, headers={'User-Agent': 'CampusA11yChecker/0.1'}), timeout=8)
+            response = opener.open(
+                Request(
+                    current,
+                    headers={'User-Agent': 'CampusA11yChecker/0.1'}
+                ),
+                timeout=8
+            )
+
         except HTTPError as exc:
             if exc.code in (301, 302, 303, 307, 308):
                 location = exc.headers.get('Location')
+
                 if not location:
-                    raise ScanError('The website redirected without a destination.')
+                    raise ScanError(
+                        'The website redirected without a destination. '
+                        'Check the URL and try again.'
+                    ) from None
+
                 current = urljoin(current, location)
                 continue
-            raise ScanError(f'The website returned HTTP {exc.code}.')
-        except (URLError, TimeoutError, OSError) as exc:
-            raise ScanError(f'Could not load the webpage: {exc.reason if hasattr(exc, "reason") else exc}')
+
+            raise ScanError(
+                f'The website returned an HTTP {exc.code} error. '
+                'Check the URL or try again later.'
+            ) from None
+
+        except (TimeoutError, socket.timeout):
+            raise ScanError(
+                'The request timed out. '
+                'Check your connection and try again.'
+            ) from None
+
+        except URLError as exc:
+            if isinstance(exc.reason, (TimeoutError, socket.timeout)):
+                raise ScanError(
+                    'The request timed out. '
+                    'Check your connection and try again.'
+                ) from None
+
+            raise ScanError(
+                'Could not connect to the website. '
+                'Check the URL and your internet connection, then try again.'
+            ) from None
+
+        except OSError:
+            raise ScanError(
+                'Could not load the webpage because of a connection problem. '
+                'Check the URL and try again.'
+            ) from None
+
         with response:
             kind = response.headers.get_content_type()
+
             if kind not in ('text/html', 'application/xhtml+xml'):
-                raise ScanError('This URL does not return an HTML webpage.')
+                raise ScanError(
+                    'This address does not return an HTML webpage. '
+                    'Try a URL that opens a webpage in your browser.'
+                )
+
             raw = response.read(MAX_BYTES + 1)
+
             if len(raw) > MAX_BYTES:
-                raise ScanError('The webpage exceeds the 1.5 MB scan limit.')
+                raise ScanError(
+                    'The webpage exceeds the 1.5 MB scan limit. '
+                    'Try a smaller webpage.'
+                )
+
             charset = response.headers.get_content_charset() or 'utf-8'
+
             try:
-                return current, raw.decode(charset, errors='replace')
+                html = raw.decode(charset, errors='replace')
             except LookupError:
-                return current, raw.decode('utf-8', errors='replace')
-    raise ScanError('Too many redirects.')
+                html = raw.decode('utf-8', errors='replace')
+
+            return current, html
+
+    raise ScanError(
+        'The website redirected too many times. '
+        'Check the URL or try the website homepage.'
+    )
 
 
 class PageParser(HTMLParser):
