@@ -1,11 +1,13 @@
 """Dependency-free starter scanner: static HTML checks and limited URL risk signals."""
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, urlunsplit, urljoin
-from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
+from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler, HTTPSHandler
 from urllib.error import HTTPError, URLError
+import certifi
 import ipaddress
 import socket
 import re
+import ssl
 
 MAX_BYTES = 1_500_000
 
@@ -55,7 +57,8 @@ class NoRedirect(HTTPRedirectHandler, ProxyHandler):
 
 def fetch_page(url):
     """Revalidate each redirect; DNS rebinding still requires network sandboxing for public deployments."""
-    opener = build_opener(NoRedirect, ProxyHandler({}))
+    tls_context = ssl.create_default_context(cafile=certifi.where())
+    opener = build_opener(NoRedirect, ProxyHandler({}), HTTPSHandler(context=tls_context))
     current = url
     for _ in range(5):
         current = validate_url(current)
