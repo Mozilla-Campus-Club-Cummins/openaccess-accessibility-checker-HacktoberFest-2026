@@ -152,6 +152,22 @@ h3{margin:0 0 8px}
   text-decoration:underline
 }
 .historyitem span{overflow-wrap:anywhere}
+.historyselect{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:#c1ccda
+}
+.comparison{
+  margin:18px 0;
+  padding:16px;
+  border:1px solid #344056;
+  border-radius:10px
+}
+.comparison h3{margin:0 0 10px}
+.comparison-group{margin-top:18px}
+.comparison-group h4{margin:0 0 8px}
+.comparison-group:empty{display:none}
 .hidden{display:none}
 
 @media(max-width:650px){
@@ -332,8 +348,24 @@ h3{margin:0 0 8px}
   </div>
 
   <p class="muted">
-    Stored only in this browser. Open a past scan to view its saved report.
+    Stored locally on this device. Open a past scan to view its saved report.
   </p>
+
+  <div class="comparison">
+    <button class="secondary" id="compare" type="button" disabled>
+      Compare selected reports (0/2)
+    </button>
+    <p class="muted" id="compare-status" role="status" aria-live="polite">
+      Select two reports for the same URL to compare them.
+    </p>
+    <section id="compare-results" class="hidden" aria-labelledby="compare-title">
+      <h3 id="compare-title">Report comparison</h3>
+      <p id="compare-summary"></p>
+      <div id="compare-new" class="comparison-group"></div>
+      <div id="compare-resolved" class="comparison-group"></div>
+      <div id="compare-persistent" class="comparison-group"></div>
+    </section>
+  </div>
 
   <div id="historylist"></div>
 
@@ -370,6 +402,7 @@ const key = 'openaccess-history-v1';
 
 let current = null;
 let history = [];
+let selectedReports = [];
 
 
 /* LOAD HISTORY */
@@ -448,6 +481,8 @@ function renderHistory() {
       )
     );
 
+    updateComparisonControls();
+
     return;
   }
 
@@ -469,6 +504,32 @@ function renderHistory() {
       ' findings'
     );
 
+    const selectLabel = el('label', undefined, 'historyselect');
+    const select = el('input');
+    select.type = 'checkbox';
+    select.checked = selectedReports.includes(row);
+    select.setAttribute(
+      'aria-label',
+      'Select report from ' + new Date(row.at).toLocaleString() + ' for comparison'
+    );
+    select.addEventListener('change', () => {
+      if (select.checked && selectedReports.length >= 2) {
+        select.checked = false;
+        $('compare-status').textContent = 'Select no more than two reports.';
+        return;
+      }
+
+      if (select.checked) {
+        selectedReports.push(row);
+      } else {
+        selectedReports = selectedReports.filter(item => item !== row);
+      }
+
+      $('compare-results').classList.add('hidden');
+      updateComparisonControls();
+    });
+    selectLabel.append(select, document.createTextNode('Compare'));
+
     const btn = el(
       'button',
       'View report'
@@ -489,13 +550,131 @@ function renderHistory() {
       }
     );
 
-    div.append(span, btn);
+    div.append(span, selectLabel, btn);
 
     box.append(div);
 
   });
 
+  updateComparisonControls();
+
 }
+
+
+/* REPORT COMPARISON */
+
+function normalizedReportUrl(value) {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol)) return '';
+    url.hash = '';
+    return url.href;
+  } catch {
+    return '';
+  }
+}
+
+function updateComparisonControls() {
+  const button = $('compare');
+  button.textContent = `Compare selected reports (${selectedReports.length}/2)`;
+  button.disabled = selectedReports.length !== 2;
+
+  if (selectedReports.length === 2) {
+    const [first, second] = selectedReports;
+    const sameUrl = normalizedReportUrl(first.report.url) &&
+      normalizedReportUrl(first.report.url) === normalizedReportUrl(second.report.url);
+    button.disabled = !sameUrl;
+    $('compare-status').textContent = sameUrl
+      ? 'Ready to compare these reports.'
+      : 'Choose two reports for the same URL.';
+  } else {
+    $('compare-status').textContent = selectedReports.length === 0
+      ? 'Select two reports for the same URL to compare them.'
+      : 'Select one more report for the same URL.';
+  }
+}
+
+function findingIdentity(finding) {
+  return JSON.stringify([
+    String(finding.rule || ''),
+    String(finding.element || '')
+  ]);
+}
+
+function compareFindings(older, newer) {
+  const olderById = new Map();
+  const newerById = new Map();
+
+  for (const finding of older.findings || []) {
+    const id = findingIdentity(finding);
+    if (!olderById.has(id)) olderById.set(id, []);
+    olderById.get(id).push(finding);
+  }
+
+  for (const finding of newer.findings || []) {
+    const id = findingIdentity(finding);
+    if (!newerById.has(id)) newerById.set(id, []);
+    newerById.get(id).push(finding);
+  }
+
+  const result = {new: [], resolved: [], persistent: []};
+  const ids = new Set([...olderById.keys(), ...newerById.keys()]);
+
+  for (const id of ids) {
+    const oldItems = olderById.get(id) || [];
+    const newItems = newerById.get(id) || [];
+    const shared = Math.min(oldItems.length, newItems.length);
+
+    for (let index = 0; index < shared; index++) {
+      result.persistent.push(newItems[index]);
+    }
+    result.resolved.push(...oldItems.slice(shared));
+    result.new.push(...newItems.slice(shared));
+  }
+
+  return result;
+}
+
+function renderComparisonGroup(id, title, findings) {
+  const group = $(id);
+  group.replaceChildren();
+  if (!findings.length) return;
+
+  group.append(el('h4', `${title} (${findings.length})`));
+  for (const finding of findings) {
+    const row = el('article', undefined, 'finding');
+    row.append(
+      el('strong', finding.rule || 'Accessibility issue'),
+      el('code', finding.element || ''),
+      el('p', finding.message || '')
+    );
+    group.append(row);
+  }
+}
+
+function renderComparison() {
+  const ordered = [...selectedReports].sort((a, b) =>
+    new Date(a.at).getTime() - new Date(b.at).getTime()
+  );
+  const [older, newer] = ordered;
+  const changes = compareFindings(older.report, newer.report);
+  const olderDate = new Date(older.at).toLocaleString();
+  const newerDate = new Date(newer.at).toLocaleString();
+
+  $('compare-summary').textContent =
+    `${older.report.url} · Older: ${olderDate} · Newer: ${newerDate}`;
+  renderComparisonGroup('compare-new', 'New', changes.new);
+  renderComparisonGroup('compare-resolved', 'Resolved', changes.resolved);
+  renderComparisonGroup('compare-persistent', 'Persistent', changes.persistent);
+
+  if (!changes.new.length && !changes.resolved.length && !changes.persistent.length) {
+    $('compare-summary').textContent += ' · Neither report contains findings.';
+  }
+
+  $('compare-results').classList.remove('hidden');
+}
+
+$('compare').addEventListener('click', renderComparison);
 
 
 /* RENDER REPORT */
@@ -959,6 +1138,8 @@ $('clear').addEventListener(
     }
 
     history = [];
+    selectedReports = [];
+    $('compare-results').classList.add('hidden');
 
     save();
 
