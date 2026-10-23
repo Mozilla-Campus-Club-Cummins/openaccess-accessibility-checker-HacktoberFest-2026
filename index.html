@@ -857,94 +857,52 @@ $('export').addEventListener(
 
 
 /* DOWNLOAD CSV */
+$('csv').addEventListener('click', () => {
+  if (!current) return;
 
-$('csv').addEventListener(
-  'click',
-  () => {
+  const quote = value => {
+    let cell = String(value ?? '');
+    if (/^[\s\u0000-\u001f]*[=+@-]/.test(cell)) cell = "'" + cell;
+    return '"' + cell.replace(/"/g, '""') + '"';
+  };
 
-    if (!current) return;
+  const rows = [];
+  const addRow = values => rows.push(values.map(quote).join(','));
+  const checks = current.score?.checks || [];
 
-    const quote = v => {
+  addRow(['Report metadata', 'Value']);
+  addRow(['Scan time (UTC)', new Date().toISOString()]);
+  addRow(['URL', current.url || '']);
+  addRow(['Basic score', current.score?.value ?? '']);
+  addRow(['Score note', current.score?.note || '']);
+  addRow(['Category', 'Category status']);
 
-      let cell = String(v ?? '');
-
-      /*
-       Prevent CSV formula injection.
-      */
-
-      if (/^[\s]*[=+@-]/.test(cell)) {
-        cell = "'" + cell;
-      }
-
-      return '"' +
-        cell.replaceAll('"', '""') +
-        '"';
-
-    };
-
-    const rows = [
-      [
-        'URL',
-        'Basic score',
-        'Rule',
-        'Severity',
-        'Element',
-        'Issue',
-        'Suggested fix'
-      ]
-        .map(quote)
-        .join(',')
-    ];
-
-    for (const f of current.findings || []) {
-
-      rows.push(
-        [
-          current.url,
-          current.score?.value ?? '',
-          f.rule,
-          f.impact,
-          f.element,
-          f.message,
-          f.fix
-        ]
-          .map(quote)
-          .join(',')
-      );
-
-    }
-
-    const blob = new Blob(
-      [
-        '\uFEFF' +
-        rows.join('\r\n')
-      ],
-      {
-        type: 'text/csv;charset=utf-8'
-      }
-    );
-
-    const a =
-      document.createElement('a');
-
-    a.href =
-      URL.createObjectURL(blob);
-
-    a.download =
-      'accessibility-report.csv';
-
-    a.click();
-
-    setTimeout(
-      () => URL.revokeObjectURL(a.href),
-      1000
-    );
-
+  if (checks.length) {
+    for (const check of checks) addRow([check.name || '', check.status || '']);
+  } else {
+    addRow(['No category status available', '']);
   }
-);
 
+  addRow([]);
+  addRow(['URL', 'Basic score', 'Rule', 'Severity', 'Element', 'Issue', 'Suggested fix']);
 
-/* CLEAR HISTORY */
+  const findings = current.findings || [];
+  if (findings.length) {
+    for (const f of findings) {
+      addRow([current.url, current.score?.value ?? '', f.rule, f.impact, f.element, f.message, f.fix]);
+    }
+  } else {
+    addRow([current.url, current.score?.value ?? '', '', '', '', 'No accessibility findings', '']);
+  }
+
+  const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  const objectUrl = URL.createObjectURL(blob);
+  link.href = objectUrl;
+  link.download = 'accessibility-report.csv';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+});
 
 $('clear').addEventListener(
   'click',
