@@ -5,3 +5,9 @@ __pycache__/
 *.pkl
 *.db
 .DS_Store
+
+# Node.js dependencies
+node_modules/
+# Playwright test output
+test-results/
+playwright-report/

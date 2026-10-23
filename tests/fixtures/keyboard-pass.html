@@ -1,0 +1,21 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keyboard Accessibility Passing Fixture</title>
+</head>
+<body>
+  <h1>Keyboard Accessibility Test</h1>
+
+  <button type="button" id="action-button"
+    onclick="document.getElementById('result').textContent = 'Action completed';">
+    Activate action
+  </button>
+
+  <a href="#result">Go to result</a>
+
+  <p id="result" role="status" tabindex="-1">Ready</p>
+</body>
+</html>
