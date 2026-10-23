@@ -309,7 +309,13 @@ h3{margin:0 0 8px}
       >
         Download CSV
       </button>
-
+      <button
+        class="secondary"
+        id="pdf"
+        type="button"
+      >
+        Download PDF
+      </button>
     </div>
 
   </div>
@@ -681,7 +687,10 @@ $('compare').addEventListener('click', renderComparison);
 
 function renderReport(data) {
 
-  current = data;
+  current = {
+  ...data,
+  scanTimestamp: data.scanTimestamp || data.timestamp || new Date().toLocaleString()
+};
 
   $('results').classList.remove('hidden');
 
@@ -994,6 +1003,181 @@ $('demo').addEventListener(
 );
 
 
+/* BUILD PRINTABLE PDF REPORT */
+
+function escapeReportHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char]);
+}
+
+function buildPrintableReport(data) {
+  const findings = Array.isArray(data.findings)
+    ? data.findings
+    : [];
+
+  const groups = new Map();
+
+  for (const finding of findings) {
+    const category = finding.impact || 'Unknown severity';
+
+    if (!groups.has(category)) {
+      groups.set(category, []);
+    }
+
+    groups.get(category).push(finding);
+  }
+
+  const findingSections = groups.size
+    ? [...groups.entries()].map(([category, items]) => `
+        <section class="finding-group">
+          <h2>${escapeReportHtml(category)} (${items.length})</h2>
+          ${items.map((finding, index) => `
+            <article class="finding">
+              <h3>${index + 1}. ${escapeReportHtml(finding.rule || 'Accessibility issue')}</h3>
+              <p><strong>Element:</strong></p>
+              <pre>${escapeReportHtml(finding.element || 'Not provided')}</pre>
+              <p><strong>Issue:</strong> ${escapeReportHtml(finding.message || 'No description provided.')}</p>
+              <p><strong>Suggested fix:</strong> ${escapeReportHtml(finding.fix || 'Review this element manually.')}</p>
+            </article>
+          `).join('')}
+        </section>
+      `).join('')
+    : '<p>No issues were reported by these automated checks. Manual accessibility testing is still needed.</p>';
+
+  const score = data.score;
+  const scoreText = score
+    ? `${score.value == null ? 'N/A' : escapeReportHtml(score.value) + '%'} — ${escapeReportHtml(score.passed ?? 0)} of ${escapeReportHtml(score.applicable ?? 0)} applicable categories passed`
+    : 'Not available';
+
+  const safety = data.safety;
+
+  const safetyHtml = safety
+    ? `
+      <p><strong>Status:</strong> ${escapeReportHtml(safety.status || 'Not available')}</p>
+      <p><strong>Note:</strong> ${escapeReportHtml(safety.note || 'No additional safety information was provided.')}</p>
+      <ul>
+        ${(Array.isArray(safety.signals) ? safety.signals : []).map(signal =>
+          `<li>${escapeReportHtml(typeof signal === 'string' ? signal : JSON.stringify(signal))}</li>`
+        ).join('')}
+      </ul>
+    `
+    : '<p>URL safety was not reported for this scan. This does not mean the URL is safe or unsafe.</p>';
+
+  const generatedAt = new Date().toLocaleString();
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accessibility Report</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #202124;
+    line-height: 1.5;
+    font-size: 11pt;
+    overflow-wrap: anywhere;
+  }
+  h1 { font-size: 24pt; margin-bottom: 4px; }
+  h2 {
+    font-size: 16pt;
+    margin-top: 24px;
+    border-bottom: 1px solid #bbb;
+    padding-bottom: 5px;
+  }
+  h3 { font-size: 12pt; margin-bottom: 8px; }
+  .muted { color: #555; }
+  .summary {
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 16px 0;
+  }
+  .finding {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 12px;
+    margin: 12px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .finding-group { break-before: auto; }
+  pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: Consolas, monospace;
+    font-size: 9pt;
+    background: #f4f4f4;
+    padding: 8px;
+  }
+  li { margin-bottom: 5px; }
+  .actions { margin-bottom: 20px; }
+  .actions button { padding: 10px 16px; font-size: 11pt; cursor: pointer; }
+  @media print {
+    .actions { display: none; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<div class="actions">
+  <button type="button" onclick="window.print()">Save as PDF / Print</button>
+</div>
+<header>
+  <h1>Accessibility Report</h1>
+  <p class="muted">Generated: ${escapeReportHtml(generatedAt)}</p>
+</header>
+
+<section class="summary">
+  <h2>Scan details</h2>
+  <p><strong>URL:</strong> ${escapeReportHtml(data.url || 'Not provided')}</p>
+  <p><strong>Scan time:</strong> ${escapeReportHtml(data.scanTimestamp || data.timestamp || 'Not provided')}</p>
+  <p><strong>Scan method:</strong> ${escapeReportHtml(data.method || 'Not provided')}</p>
+  <p><strong>Basic category score:</strong> ${scoreText}</p>
+  <p>${escapeReportHtml(score?.note || 'This score is a basic indicator based on applicable automated categories. It is not a WCAG compliance determination and does not replace manual testing.')}</p>
+</section>
+
+<section>
+  <h2>URL safety</h2>
+  ${safetyHtml}
+  <p class="muted">Automated URL signals are limited and do not establish that a website is safe or malicious.</p>
+</section>
+
+<section>
+  <h2>Findings (${findings.length})</h2>
+  ${findingSections}
+</section>
+
+<footer class="muted">
+  <p>Automated checks have limitations. Review the website manually, including dynamic content and keyboard interactions.</p>
+</footer>
+</body>
+</html>`;
+}
+/* DOWNLOAD PDF */
+
+$('pdf').addEventListener('click', () => {
+  if (!current) return;
+
+  const reportWindow = window.open('', '_blank');
+
+  if (!reportWindow) {
+    alert('Please allow pop-ups to open the printable report.');
+    return;
+  }
+
+  reportWindow.document.open();
+  reportWindow.document.write(buildPrintableReport(current));
+  reportWindow.document.close();
+});
 /* DOWNLOAD JSON */
 
 $('export').addEventListener(
