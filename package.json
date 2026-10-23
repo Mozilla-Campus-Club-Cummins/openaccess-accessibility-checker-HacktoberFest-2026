@@ -1,0 +1,10 @@
+
+{
+  "scripts": {
+    "test:keyboard": "playwright test tests/browser/keyboard-accessibility.test.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "playwright": "^1.64.1"
+  }
+}

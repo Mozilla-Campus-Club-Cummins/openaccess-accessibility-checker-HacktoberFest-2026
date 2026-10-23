@@ -321,7 +321,25 @@ h3{margin:0 0 8px}
   <p class="muted" id="method"></p>
 
   <div id="findings"></div>
+  <section id="keyboard-results" aria-labelledby="keyboard-results-title">
+  <h3 id="keyboard-results-title">Browser keyboard checks</h3>
 
+  <p class="muted" id="keyboard-status" role="status">
+    Browser checks have not been run. Results will appear here only after
+    a browser check has actually completed.
+  </p>
+
+  <div id="keyboard-findings"></div>
+
+  <h4>Manual keyboard review still required</h4>
+  <p class="muted">
+    Use Tab and Shift+Tab to check focus order, confirm that focus is
+    visible, and activate controls using Enter or Space as appropriate.
+    Check dialogs, menus, and dynamically updated content manually.
+    Automated checks cannot establish full keyboard accessibility or
+    WCAG conformance.
+  </p>
+</section>
 </section>
 
 
@@ -371,6 +389,68 @@ h3{margin:0 0 8px}
 
 </section>
 
+
+<!-- KEYBOARD ACCESSIBILITY REVIEW -->
+
+<section class="panel" id="keyboard-review">
+  <h2>Keyboard accessibility review</h2>
+
+  <p class="muted">
+    Automated browser checks can identify some keyboard-accessibility
+    problems, but they cannot prove that a page is fully keyboard
+    accessible. Complete this manual review as well.
+  </p>
+
+  <h3>Manual review checklist</h3>
+
+  <ul>
+    <li>
+      <label>
+        <input type="checkbox">
+        All interactive controls can be reached using the Tab and
+        Shift+Tab keys.
+      </label>
+    </li>
+    <li>
+      <label>
+        <input type="checkbox">
+        The current keyboard focus is always clearly visible.
+      </label>
+    </li>
+    <li>
+      <label>
+        <input type="checkbox">
+        Controls work with the appropriate keyboard keys, such as
+        Enter or Space.
+      </label>
+    </li>
+    <li>
+      <label>
+        <input type="checkbox">
+        Focus moves in a logical order and is not trapped unexpectedly.
+      </label>
+    </li>
+    <li>
+      <label>
+        <input type="checkbox">
+        Dialogs, menus, and dynamically updated content behave correctly
+        when operated using the keyboard.
+      </label>
+    </li>
+  </ul>
+
+  <h3>What automation cannot confirm</h3>
+
+  <p class="muted">
+    Tab-stop detection observes focusable elements and keyboard
+    navigation in the tested browser state. It cannot reliably judge
+    whether focus order is meaningful, focus indicators are adequate,
+    every interaction works correctly, or dynamic states are accessible.
+    Results are limited to the tested page state and browser. Human
+    keyboard testing is required; these checks do not establish WCAG
+    conformance.
+  </p>
+</section>
 
 <!-- ABOUT -->
 
