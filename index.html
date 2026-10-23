@@ -679,6 +679,67 @@ $('compare').addEventListener('click', renderComparison);
 
 /* RENDER REPORT */
 
+function buildVersionedReport(data) {
+  const findings = Array.isArray(data.findings)
+    ? data.findings
+    : [];
+
+  const issueCounts = {
+    critical: 0,
+    serious: 0,
+    moderate: 0,
+    minor: 0,
+    unknown: 0
+  };
+
+    for (const finding of findings) {
+    const impact = finding.impact || 'unknown';
+    const countKey = Object.hasOwn(issueCounts, impact)
+      ? impact
+      : 'unknown';
+
+    issueCounts[countKey] += 1;
+  }
+
+  return {
+    schemaVersion: '1.0.0',
+    exportedAt: new Date().toISOString(),
+    scan: {
+      timestamp: data.scanTimestamp || null,
+      url: data.url || '',
+      engine: data.engine || 'OpenAccess Accessibility Checker',
+      method: data.method || '',
+      score: data.score || null
+    },
+    issueCounts,
+    rules: [...new Set(
+      findings.map(finding => finding.rule).filter(Boolean)
+    )],
+    findings,
+    fixes: findings.map(finding => ({
+      rule: finding.rule || '',
+      element: finding.element || '',
+      suggestion: finding.fix || 'Review this element.'
+    })),
+    safety: data.safety || {
+      status: 'Not available',
+      signals: [],
+      note: 'Safety signals were not included in this scan result.'
+    },
+    limitations: [
+      'Static HTML checks do not cover all dynamic content.',
+      'Automated findings do not replace manual accessibility testing.',
+      'The score is a basic indicator, not a WCAG compliance determination.'
+    ],
+
+    // Preserve the original fields for compatibility with older consumers.
+    url: data.url || '',
+    findings,
+    score: data.score || null,
+    method: data.method || ''
+  };
+}
+
 function renderReport(data) {
 
   current = data;
@@ -882,6 +943,7 @@ $('scanform').addEventListener(
       );
 
       const data = await res.json();
+      data.scanTimestamp = new Date().toISOString();
 
       if (!res.ok) {
 
@@ -959,6 +1021,7 @@ $('demo').addEventListener(
       );
 
       const data = await res.json();
+      data.scanTimestamp = new Date().toISOString();
 
       if (!res.ok) {
 
@@ -1005,10 +1068,10 @@ $('export').addEventListener(
     const file = new Blob(
       [
         JSON.stringify(
-          current,
-          null,
-          2
-        )
+  buildVersionedReport(current),
+  null,
+  2
+)
       ],
       {
         type: 'application/json'

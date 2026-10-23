@@ -1,4 +1,6 @@
 import unittest
+import subprocess
+import shutil
 from unittest.mock import patch
 from pathlib import Path
 from scanner import accessibility_findings, accessibility_score, validate_url, public_addresses, ScanError
@@ -68,5 +70,24 @@ class ScannerTests(unittest.TestCase):
         findings = accessibility_findings(html)
         rules = [item['rule'] for item in findings]
         self.assertIn('Main heading', rules)
+
+    def test_versioned_json_report(self):
+        if shutil.which('node') is None:
+            self.skipTest('Node.js is required for the JSON report test.')
+
+        project_root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            ['node', 'test_json_report.js'],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=result.stdout + result.stderr,
+        )
 
 if __name__=='__main__':unittest.main()
