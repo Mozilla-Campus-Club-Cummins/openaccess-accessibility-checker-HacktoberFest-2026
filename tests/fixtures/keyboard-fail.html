@@ -1,0 +1,20 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keyboard Accessibility Failing Fixture</title>
+</head>
+<body>
+  <h1>Keyboard Accessibility Test</h1>
+
+  <button type="button">Accessible button</button>
+
+  <div onclick="document.getElementById('result').textContent = 'Action completed';">
+    Clickable control without keyboard support
+  </div>
+
+  <p id="result" role="status"></p>
+</body>
+</html>
